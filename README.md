@@ -1,12 +1,16 @@
 # n8n-nodes-jev-router
 
-An [n8n](https://n8n.io) community node for [TypeSafe AI](https://typesafe.ai)'s **Jev** model.
+An [n8n](https://n8n.io) community node integrating [TypeSafe AI](https://typesafe.ai)'s
+**Jev** model — a "System One" decision model, not a chat model. You send it one or more typed
+questions (Choice, Score, or Noul/Boolean) about a piece of text or data, and it answers each
+with a structured, typed value plus a confidence or probability score, in a single API call.
 
-Jev is a "System One" decision model — it isn't a chat model, it doesn't return prose. You ask
-it one or more typed questions (Choice, Score, or Noul/Boolean) about a piece of text or data,
-and it returns a typed, structured answer with a confidence or probability attached. This node
-wraps that API and adds the one thing every classifier eventually needs: routing workflow items
-by the answer, with a built-in escape hatch for low-confidence calls.
+This package integrates exactly one third-party service — TypeSafe AI's `/v1/systemone`
+endpoint — through one node with two operations: **Classify & Route**, which calls Jev and
+optionally branches the workflow by one of its answers, and **Calibration Check**, which
+validates Jev's confidence scores against your own labeled data. The branching in Classify &
+Route is a UX layer built directly on top of that API call (similar to how many integration
+nodes expose a success/error output), not a standalone flow-control utility.
 
 ## What this node does
 
@@ -33,15 +37,11 @@ In n8n: **Settings → Community Nodes → Install**, and enter:
 n8n-nodes-jev-router
 ```
 
-Or from the repo root, for local development against an existing n8n install:
-
-```bash
-npm install
-npm run build
-npm link
-# then, inside your n8n installation:
-npm link n8n-nodes-jev-router
-```
+For local development against a self-hosted n8n instance, set `N8N_CUSTOM_EXTENSIONS` to this
+project's `dist/` directory (after `npm install && npm run build`) so n8n picks it up without
+needing the package published first — see
+[n8n's community node development docs](https://docs.n8n.io/integrations/creating-nodes/) for
+details.
 
 ## Credentials
 
@@ -101,8 +101,8 @@ out of the box.
 
 - Questions are always batched into a single Jev API call per item (never one call per
   question).
-- Retries on transient errors (HTTP 429 rate-limited, 529 overloaded) use n8n's standard
-  per-node **Retry On Fail** setting (Settings tab on the node) — enable it there.
+- Transient errors (HTTP 429 rate-limited, 529 overloaded) are retried automatically with
+  exponential backoff, up to 4 attempts — no node setting to enable.
 - Noul questions have no confidence field in Jev's response (only a probability), so the
   Confidence Threshold field is hidden for them in the UI; threshold on the noul probability
   value itself instead.
