@@ -10,14 +10,17 @@
     "routing"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/your-org/n8n-nodes-jev-router",
+  "homepage": "https://github.com/guptadivyanshu765/n8n-nodes-jev-router",
   "author": {
     "name": "Divyanshu Gupta",
     "email": "guptadivyanshu765@gmail.com"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/n8n-nodes-jev-router.git"
+    "url": "https://github.com/guptadivyanshu765/n8n-nodes-jev-router.git"
+  },
+  "bugs": {
+    "url": "https://github.com/guptadivyanshu765/n8n-nodes-jev-router/issues"
   },
   "main": "index.js",
   "scripts": {
