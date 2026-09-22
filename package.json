@@ -22,20 +22,21 @@
   "bugs": {
     "url": "https://github.com/guptadivyanshu765/n8n-nodes-jev-router/issues"
   },
-  "main": "index.js",
   "scripts": {
-    "build": "tsc && gulp build:icons",
-    "dev": "tsc --watch",
-    "format": "prettier nodes credentials --write",
-    "lint": "eslint nodes credentials package.json --ext .ts,.json",
-    "lintfix": "eslint nodes credentials package.json --ext .ts,.json --fix",
-    "prepublishOnly": "npm run build && npm run lint"
+    "build": "n8n-node build",
+    "build:watch": "tsc --watch",
+    "dev": "n8n-node dev",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "release": "n8n-node release",
+    "prepublishOnly": "n8n-node prerelease"
   },
   "files": [
     "dist"
   ],
   "n8n": {
     "n8nNodesApiVersion": 1,
+    "strict": true,
     "credentials": [
       "dist/credentials/JevApi.credentials.js"
     ],
@@ -44,16 +45,11 @@
     ]
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
-    "eslint": "^8.57.0",
-    "eslint-plugin-n8n-nodes-base": "^1.16.0",
-    "gulp": "^4.0.2",
-    "jsonc-eslint-parser": "^2.4.0",
-    "n8n-core": "^1.14.1",
-    "n8n-workflow": "^1.14.1",
-    "prettier": "^3.2.5",
-    "typescript": "^5.4.0"
+    "@n8n/node-cli": "^0.49.1",
+    "eslint": "^9.29.0",
+    "prettier": "^3.8.3",
+    "release-it": "^20.2.0",
+    "typescript": "^5.9.3"
   },
   "peerDependencies": {
     "n8n-workflow": "*"

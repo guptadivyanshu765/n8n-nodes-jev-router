@@ -2,6 +2,7 @@ import type {
 	IAuthenticateGeneric,
 	ICredentialTestRequest,
 	ICredentialType,
+	Icon,
 	INodeProperties,
 } from 'n8n-workflow';
 
@@ -9,6 +10,8 @@ export class JevApi implements ICredentialType {
 	name = 'jevApi';
 
 	displayName = 'Jev API';
+
+	icon: Icon = { light: 'file:jevApi.svg', dark: 'file:jevApi.svg' };
 
 	documentationUrl = 'https://typesafe.ai/docs';
 

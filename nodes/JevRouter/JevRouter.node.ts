@@ -2,13 +2,14 @@ import type {
 	IDataObject,
 	IExecuteFunctions,
 	ILoadOptionsFunctions,
+	INode,
 	INodeExecutionData,
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
 	JsonObject,
 } from 'n8n-workflow';
-import { NodeApiError, NodeOperationError } from 'n8n-workflow';
+import { NodeApiError, NodeConnectionTypes, NodeOperationError, sleep } from 'n8n-workflow';
 
 // ---------------------------------------------------------------------------
 // Types describing the shape of the "Questions" fixedCollection once it has
@@ -104,7 +105,7 @@ export class JevRouter implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Jev Router',
 		name: 'jevRouter',
-		icon: 'file:jevRouter.svg',
+		icon: { light: 'file:jevRouter.svg', dark: 'file:jevRouter.svg' },
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"]}}',
@@ -117,12 +118,12 @@ export class JevRouter implements INodeType {
 		defaults: {
 			name: 'Jev Router',
 		},
-		inputs: ['main'],
+		inputs: [NodeConnectionTypes.Main],
 		// The output count/labels for this node are resolved dynamically by n8n
 		// at runtime (see `configuredOutputs` above), the same mechanism the
 		// built-in Switch node uses, so this is an expression string rather
 		// than a static array.
-		outputs: `={{(${configuredOutputs.toString()})($parameter)}}` as unknown as INodeTypeDescription['outputs'],
+		outputs: `={{(${configuredOutputs.toString()})($parameter)}}`,
 		usableAsTool: true,
 		credentials: [
 			{
@@ -164,7 +165,7 @@ export class JevRouter implements INodeType {
 				default: '',
 				required: true,
 				displayOptions: { show: { operation: ['classifyRoute'] } },
-				description: 'The text or data Jev should evaluate. Supports expressions, e.g. {{$json.ticketBody}}.',
+				description: 'The text or data Jev should evaluate. Supports expressions referencing fields from a previous node, such as a ticket body.',
 			},
 
 			// ---------------------------------------------------------------
@@ -206,34 +207,6 @@ export class JevRouter implements INodeType {
 						displayName: 'Question',
 						values: [
 							{
-								displayName: 'Question ID',
-								name: 'questionId',
-								type: 'string',
-								default: '',
-								required: true,
-								description: 'Key used to identify this question in the request and in the output, e.g. "department"',
-							},
-							{
-								displayName: 'Type',
-								name: 'type',
-								type: 'options',
-								options: [
-									{ name: 'Choice', value: 'choice' },
-									{ name: 'Score', value: 'score' },
-									{ name: 'Noul (Boolean)', value: 'noul' },
-								],
-								default: 'choice',
-							},
-							{
-								displayName: 'Instructions',
-								name: 'instructions',
-								type: 'string',
-								typeOptions: { rows: 2 },
-								default: '',
-								required: true,
-								description: 'What Jev should judge, e.g. "Which department should handle this ticket?"',
-							},
-							{
 								displayName: 'Choice Options',
 								name: 'choiceCriteria',
 								type: 'fixedCollection',
@@ -263,6 +236,42 @@ export class JevRouter implements INodeType {
 										],
 									},
 								],
+							},
+							{
+								displayName: 'Confidence Threshold',
+								name: 'confidenceThreshold',
+								type: 'number',
+								typeOptions: { minValue: 0, maxValue: 1, numberPrecision: 2 },
+								default: 0.5,
+								// Noul answers have no confidence field (only a probability), so
+								// this threshold is meaningless for them — hide it.
+								displayOptions: { hide: { type: ['noul'] } },
+								description: 'Answers below this confidence route to "Needs Review" when this is the routing question',
+							},
+							{
+								displayName: 'False Description',
+								name: 'noulFalseDescription',
+								type: 'string',
+								default: '',
+								displayOptions: { show: { type: ['noul'] } },
+								description: 'Optional description of what "false" means for this question',
+							},
+							{
+								displayName: 'Instructions',
+								name: 'instructions',
+								type: 'string',
+								typeOptions: { rows: 2 },
+								default: '',
+								required: true,
+								description: 'What Jev should judge, e.g. "Which department should handle this ticket?"',
+							},
+							{
+								displayName: 'Question ID',
+								name: 'questionId',
+								type: 'string',
+								default: '',
+								required: true,
+								description: 'Key used to identify this question in the request and in the output, e.g. "department"',
 							},
 							{
 								displayName: 'Score Levels',
@@ -298,23 +307,15 @@ export class JevRouter implements INodeType {
 								description: 'Optional description of what "true" means for this question',
 							},
 							{
-								displayName: 'False Description',
-								name: 'noulFalseDescription',
-								type: 'string',
-								default: '',
-								displayOptions: { show: { type: ['noul'] } },
-								description: 'Optional description of what "false" means for this question',
-							},
-							{
-								displayName: 'Confidence Threshold',
-								name: 'confidenceThreshold',
-								type: 'number',
-								typeOptions: { minValue: 0, maxValue: 1, numberPrecision: 2 },
-								default: 0.5,
-								// Noul answers have no confidence field (only a probability), so
-								// this threshold is meaningless for them — hide it.
-								displayOptions: { hide: { type: ['noul'] } },
-								description: 'Answers below this confidence route to "Needs Review" when this is the routing question',
+								displayName: 'Type',
+								name: 'type',
+								type: 'options',
+								options: [
+									{ name: 'Choice', value: 'choice' },
+									{ name: 'Score', value: 'score' },
+									{ name: 'Noul (Boolean)', value: 'noul' },
+								],
+								default: 'choice',
 							},
 						],
 					},
@@ -325,7 +326,7 @@ export class JevRouter implements INodeType {
 			// Routing (Classify & Route only)
 			// ---------------------------------------------------------------
 			{
-				displayName: 'Routing Question',
+				displayName: 'Routing Question Name or ID',
 				name: 'routingQuestion',
 				type: 'options',
 				default: '',
@@ -338,14 +339,16 @@ export class JevRouter implements INodeType {
 					// re-fetch when that parameter changes.
 					loadOptionsDependsOn: ['questions'],
 				},
-				description: 'Which Choice question decides the output branch. Leave blank to output everything on one branch.',
+				description:
+					'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
+				hint: 'Which Choice question decides the output branch. Leave blank to output everything on one branch.',
 			},
 
 			// ---------------------------------------------------------------
 			// Comparison question (Calibration Check only)
 			// ---------------------------------------------------------------
 			{
-				displayName: 'Question to Compare',
+				displayName: 'Question to Compare Name or ID',
 				name: 'comparisonQuestion',
 				type: 'options',
 				default: '',
@@ -355,7 +358,9 @@ export class JevRouter implements INodeType {
 					loadOptionsMethod: 'getAllQuestionIds',
 					loadOptionsDependsOn: ['questions'],
 				},
-				description: "Which question's answer to compare against the ground-truth field",
+				description:
+					'Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>',
+				hint: "Which question's answer to compare against the ground-truth field",
 			},
 		],
 	};
@@ -490,7 +495,15 @@ function getHttpStatus(error: unknown): number | undefined {
 	return raw === undefined ? undefined : Number(raw);
 }
 
-const wait = async (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const wait = sleep;
+
+/** Rethrows a NodeApiError/NodeOperationError as-is, wrapping anything else so it keeps its n8n context. */
+function rethrowAsNodeError(node: INode, error: unknown, itemIndex: number): never {
+	if (error instanceof NodeApiError || error instanceof NodeOperationError) {
+		throw error;
+	}
+	throw new NodeOperationError(node, error as Error, { itemIndex });
+}
 
 /**
  * Calls the Jev /v1/systemone endpoint once with a full batch of questions.
@@ -623,7 +636,7 @@ async function runClassifyRoute(
 				});
 				continue;
 			}
-			throw error;
+			rethrowAsNodeError(ctx.getNode(), error, i);
 		}
 	}
 
