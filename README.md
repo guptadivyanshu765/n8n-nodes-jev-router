@@ -68,6 +68,12 @@ A common use case is triaging inbound support tickets without an LLM chat round-
 
 **Routing Question:** `department`, with a confidence threshold of `0.75`.
 
+A ready-to-import version of this exact workflow (Manual Trigger → sample ticket → Jev Router
+→ one Set node per branch, so you can see what lands where) is in
+[`examples/support-ticket-routing.json`](examples/support-ticket-routing.json). In n8n, go to
+**Workflows → Import from File** and select it — you'll just need to pick your own `Jev API`
+credential on the Jev Router node before running it.
+
 This produces four outputs: **billing**, **sales**, **technical**, and **Needs Review**. A
 ticket Jev is confident is billing-related routes straight to the `billing` branch; anything
 under 0.75 confidence — regardless of which department it guessed — lands in **Needs Review**

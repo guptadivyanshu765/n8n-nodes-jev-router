@@ -1,0 +1,190 @@
+{
+  "id": "jevRouterExample01",
+  "name": "Jev Router — Support Ticket Routing Example",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 300],
+      "id": "8e6f2b1a-0e1a-4d6a-9d3a-1a2b3c4d5e6f",
+      "name": "When clicking Test workflow"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1a2b3c4d-0001-4001-8001-000000000001",
+              "name": "ticketBody",
+              "type": "string",
+              "value": "My card was charged twice for the same order and I need a refund immediately, this is unacceptable."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300],
+      "id": "8e6f2b1a-0e1a-4d6a-9d3a-1a2b3c4d5e70",
+      "name": "Sample Ticket"
+    },
+    {
+      "parameters": {
+        "operation": "classifyRoute",
+        "state": "={{ $json.ticketBody }}",
+        "questions": {
+          "question": [
+            {
+              "questionId": "department",
+              "type": "choice",
+              "instructions": "Which department should handle this support ticket?",
+              "choiceCriteria": {
+                "option": [
+                  { "name": "billing", "description": "Payments, charges, refunds, invoices, subscription pricing" },
+                  { "name": "sales", "description": "Pre-purchase questions, upgrades, new plans" },
+                  { "name": "technical", "description": "Bugs, errors, product not working as expected" }
+                ]
+              },
+              "confidenceThreshold": 0.75
+            },
+            {
+              "questionId": "urgency",
+              "type": "score",
+              "instructions": "How urgent is this ticket?",
+              "scoreLevels": {
+                "level": [
+                  { "label": "Low" },
+                  { "label": "Medium" },
+                  { "label": "High" },
+                  { "label": "Critical" }
+                ]
+              },
+              "confidenceThreshold": 0.5
+            },
+            {
+              "questionId": "refund_requested",
+              "type": "noul",
+              "instructions": "Is the customer explicitly asking for a refund?",
+              "noulTrueDescription": "The customer directly asks for a refund or their money back",
+              "noulFalseDescription": "No refund is mentioned or requested"
+            }
+          ]
+        },
+        "routingQuestion": "department"
+      },
+      "type": "n8n-nodes-jev-router.jevRouter",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "id": "8e6f2b1a-0e1a-4d6a-9d3a-1a2b3c4d5e71",
+      "name": "Jev Router"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1a2b3c4d-0002-4002-8002-000000000002",
+              "name": "routedTo",
+              "type": "string",
+              "value": "billing"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [700, 60],
+      "id": "8e6f2b1a-0e1a-4d6a-9d3a-1a2b3c4d5e72",
+      "name": "Billing Branch"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1a2b3c4d-0003-4003-8003-000000000003",
+              "name": "routedTo",
+              "type": "string",
+              "value": "sales"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [700, 220],
+      "id": "8e6f2b1a-0e1a-4d6a-9d3a-1a2b3c4d5e73",
+      "name": "Sales Branch"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1a2b3c4d-0004-4004-8004-000000000004",
+              "name": "routedTo",
+              "type": "string",
+              "value": "technical"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [700, 380],
+      "id": "8e6f2b1a-0e1a-4d6a-9d3a-1a2b3c4d5e74",
+      "name": "Technical Branch"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1a2b3c4d-0005-4005-8005-000000000005",
+              "name": "routedTo",
+              "type": "string",
+              "value": "needs_review"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [700, 540],
+      "id": "8e6f2b1a-0e1a-4d6a-9d3a-1a2b3c4d5e75",
+      "name": "Needs Review Branch"
+    }
+  ],
+  "connections": {
+    "When clicking Test workflow": {
+      "main": [[{ "node": "Sample Ticket", "type": "main", "index": 0 }]]
+    },
+    "Sample Ticket": {
+      "main": [[{ "node": "Jev Router", "type": "main", "index": 0 }]]
+    },
+    "Jev Router": {
+      "main": [
+        [{ "node": "Billing Branch", "type": "main", "index": 0 }],
+        [{ "node": "Sales Branch", "type": "main", "index": 0 }],
+        [{ "node": "Technical Branch", "type": "main", "index": 0 }],
+        [{ "node": "Needs Review Branch", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "instanceId": "n8n-nodes-jev-router-example"
+  }
+}
