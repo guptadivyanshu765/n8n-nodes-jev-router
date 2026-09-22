@@ -332,6 +332,11 @@ export class JevRouter implements INodeType {
 				displayOptions: { show: { operation: ['classifyRoute'] } },
 				typeOptions: {
 					loadOptionsMethod: 'getChoiceQuestionIds',
+					// Without this, the editor only fetches this dropdown's options once
+					// (while "questions" is still empty) and never refreshes them as
+					// questions are added — it needs an explicit dependency to know to
+					// re-fetch when that parameter changes.
+					loadOptionsDependsOn: ['questions'],
 				},
 				description: 'Which Choice question decides the output branch. Leave blank to output everything on one branch.',
 			},
@@ -348,6 +353,7 @@ export class JevRouter implements INodeType {
 				displayOptions: { show: { operation: ['calibrationCheck'] } },
 				typeOptions: {
 					loadOptionsMethod: 'getAllQuestionIds',
+					loadOptionsDependsOn: ['questions'],
 				},
 				description: "Which question's answer to compare against the ground-truth field",
 			},
@@ -472,7 +478,27 @@ function flattenAnswers(answers: Record<string, JevAnswer>): IDataObject {
 	return flat;
 }
 
-/** Calls the Jev /v1/systemone endpoint once with a full batch of questions. */
+// Jev-side transient failures worth retrying automatically: 429 (rate limited)
+// and 529 (overloaded). Anything else fails immediately.
+const RETRYABLE_STATUS_CODES = new Set([429, 529]);
+const MAX_ATTEMPTS = 4;
+const BASE_BACKOFF_MS = 1000;
+
+function getHttpStatus(error: unknown): number | undefined {
+	const err = error as { response?: { status?: number }; httpCode?: string | number; statusCode?: number };
+	const raw = err.response?.status ?? err.httpCode ?? err.statusCode;
+	return raw === undefined ? undefined : Number(raw);
+}
+
+const wait = async (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Calls the Jev /v1/systemone endpoint once with a full batch of questions.
+ * Retries transient 429/rate-limit and 529/overloaded responses with
+ * exponential backoff on its own — this doesn't rely on the user having
+ * enabled n8n's per-node "Retry On Fail" canvas setting, since a node type
+ * can't turn that setting on by default from its description.
+ */
 async function callJev(
 	ctx: IExecuteFunctions,
 	state: unknown,
@@ -480,23 +506,52 @@ async function callJev(
 	itemIndex: number,
 ): Promise<JevResponse> {
 	const credentials = await ctx.getCredentials('jevApi');
+
+	if (!credentials.apiKey) {
+		throw new NodeOperationError(
+			ctx.getNode(),
+			'Jev API credential is missing an API Key. Open the credential and add your TypeSafe AI API key.',
+			{ itemIndex },
+		);
+	}
+
 	const baseUrl = (credentials.baseUrl as string).replace(/\/$/, '');
 
-	try {
-		const response = await ctx.helpers.httpRequestWithAuthentication.call(ctx, 'jevApi', {
-			method: 'POST',
-			url: `${baseUrl}/v1/systemone`,
-			body: {
-				model: 'jev-1.13.0',
-				state,
-				questions: questionsPayload,
-			},
-			json: true,
-		});
-		return response as JevResponse;
-	} catch (error) {
-		throw new NodeApiError(ctx.getNode(), error as JsonObject, { itemIndex });
+	for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+		try {
+			const response = await ctx.helpers.httpRequestWithAuthentication.call(ctx, 'jevApi', {
+				method: 'POST',
+				url: `${baseUrl}/v1/systemone`,
+				body: {
+					model: 'jev-1.13.0',
+					state,
+					questions: questionsPayload,
+				},
+				json: true,
+			});
+			return response as JevResponse;
+		} catch (error) {
+			const status = getHttpStatus(error);
+			const isRetryable = status !== undefined && RETRYABLE_STATUS_CODES.has(status);
+
+			if (isRetryable && attempt < MAX_ATTEMPTS) {
+				await wait(BASE_BACKOFF_MS * 2 ** (attempt - 1));
+				continue;
+			}
+
+			if (status === 401 || status === 403) {
+				throw new NodeApiError(ctx.getNode(), error as JsonObject, {
+					itemIndex,
+					message: 'Jev API rejected the request — check that the API Key in the Jev API credential is correct',
+				});
+			}
+
+			throw new NodeApiError(ctx.getNode(), error as JsonObject, { itemIndex });
+		}
 	}
+
+	// Unreachable: the loop above always returns or throws.
+	throw new NodeOperationError(ctx.getNode(), 'Jev API call failed after retrying', { itemIndex });
 }
 
 // ---------------------------------------------------------------------------
